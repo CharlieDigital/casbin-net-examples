@@ -1,8 +1,31 @@
+using System.Threading.Tasks;
+using System.Transactions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 // dotnet run --treenode-filter "/*/*/BasicDatabaseTests/*"
 public class BasicDatabaseTests
 {
+    // In TUnit, the class is created once per test run, so we can use
+    // instance fields to hold state
+    private Database _db = null!;
+    private IDbContextTransaction _transaction = null!;
+
+    [Before(HookType.Test)]
+    public async Task SetupAsync()
+    {
+        _db = Pg.Factory.CreateDbContext();
+        _transaction = await _db.Database.BeginTransactionAsync();
+    }
+
+    [After(HookType.Test)]
+    public async Task TeardownAsync()
+    {
+        await _transaction.RollbackAsync();
+        await _transaction.DisposeAsync();
+        await _db.DisposeAsync();
+    }
+
     // 👇 Here we inject the fixture to get a handle to get the context factory.
     [ClassDataSource<PgDatabaseFixture>(Shared = SharedType.PerTestSession)]
     public required PgDatabaseFixture Pg { get; init; }
@@ -11,9 +34,6 @@ public class BasicDatabaseTests
     [Test]
     public async Task Can_Use_Database()
     {
-        await using var context = Pg.Factory.CreateDbContext();
-        await using var _ = await context.Database.BeginTransactionAsync();
-
         var user = new User
         {
             Name = "Alice",
@@ -21,10 +41,10 @@ public class BasicDatabaseTests
             Company = "Motion"
         };
 
-        context.Users.Add(user);
-        await context.SaveChangesAsync();
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
 
-        var retrievedUser = await context.Users.FirstAsync(u => u.Name == "Alice");
+        var retrievedUser = await _db.Users.FirstAsync(u => u.Name == "Alice");
 
         await Assert.That(retrievedUser).IsNotNull();
         await Assert.That(retrievedUser.Email).IsEqualTo("alice@example.com");
@@ -33,9 +53,6 @@ public class BasicDatabaseTests
     [Test]
     public async Task Can_Access_User_With_Roles()
     {
-        await using var context = Pg.Factory.CreateDbContext();
-        await using var _ = await context.Database.BeginTransactionAsync();
-
         var user = new User
         {
             Name = "Alice",
@@ -44,10 +61,10 @@ public class BasicDatabaseTests
             OrgRoles = [new() { Name = "Admin" }],
         };
 
-        context.Users.Add(user);
-        await context.SaveChangesAsync();
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
 
-        var retrievedUser = await context
+        var retrievedUser = await _db
             .Users.Include(u => u.OrgRoles)
             .FirstAsync(u => u.Name == "Alice");
 
@@ -60,9 +77,6 @@ public class BasicDatabaseTests
     [Test]
     public async Task Can_Access_User_With_Workspaces()
     {
-        await using var context = Pg.Factory.CreateDbContext();
-        await using var _ = await context.Database.BeginTransactionAsync();
-
         var user = new User
         {
             Name = "Alice",
@@ -72,10 +86,10 @@ public class BasicDatabaseTests
             Workspaces = [new() { Name = "Workspace1" }]
         };
 
-        context.Users.Add(user);
-        await context.SaveChangesAsync();
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
 
-        var retrievedUser = await context
+        var retrievedUser = await _db
             .Users.Include(u => u.OrgRoles)
             .Include(u => u.Workspaces)
             .FirstAsync(u => u.Name == "Alice");
