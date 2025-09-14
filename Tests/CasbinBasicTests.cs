@@ -1,9 +1,12 @@
-using System.Transactions;
 using Casbin;
 using Casbin.Model;
 using Casbin.Persist.Adapter.EFCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
+/// <summary>
+/// NOTE: TUnit creates class-per-test and this is NOT the same behavior as xUnit
+/// or NUnit.  So this approach of using local variables is specific to TUnit.
+/// </summary>
 // dotnet run --treenode-filter "/*/*/CasbinBasicTests/*"
 public class CasbinBasicTests
 {
@@ -14,7 +17,7 @@ public class CasbinBasicTests
     private IDbContextTransaction _casbinTransaction = null!;
     private string _aliceId = string.Empty;
 
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync()
     {
         _db = Pg.Factory.CreateDbContext();
@@ -45,10 +48,10 @@ public class CasbinBasicTests
         await _enforcer.SavePolicyAsync();
     }
 
-    [After(HookType.Test)]
+    [After(Test)]
     public async Task TeardownAsync()
     {
-        // Clean everything up.
+        // Clean everything up after each test.
         await _transaction.RollbackAsync();
         await _transaction.DisposeAsync();
         await _casbinTransaction.RollbackAsync();

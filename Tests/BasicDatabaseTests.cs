@@ -11,14 +11,14 @@ public class BasicDatabaseTests
     private Database _db = null!;
     private IDbContextTransaction _transaction = null!;
 
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync()
     {
         _db = Pg.Factory.CreateDbContext();
         _transaction = await _db.Database.BeginTransactionAsync();
     }
 
-    [After(HookType.Test)]
+    [After(Test)]
     public async Task TeardownAsync()
     {
         await _transaction.RollbackAsync();
