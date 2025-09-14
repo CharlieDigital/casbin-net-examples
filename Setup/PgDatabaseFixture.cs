@@ -10,8 +10,8 @@ using TUnit.Core.Interfaces;
 /// </summary>
 public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
 {
-    private PostgreSqlContainer? _pg = null;
-    private PostgreSqlContainer? _pgCasbin = null;
+    private PostgreSqlContainer _pg = null!;
+    private PostgreSqlContainer _pgCasbin = null!;
 
     public PooledDbContextFactory<Database> Factory { get; private set; } = null!;
 
@@ -21,6 +21,7 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
         _pg = new PostgreSqlBuilder()
             .WithDatabase("domain")
             .WithReuse(true)
+            .WithName("test-casbin-domain")
             .WithLabel("reuse-id", "test-casbin-domain")
             .Build();
 
@@ -43,6 +44,7 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
         _pgCasbin = new PostgreSqlBuilder()
             .WithDatabase("casbin")
             .WithReuse(true)
+            .WithName("test-casbin")
             .WithLabel("reuse-id", "test-casbin")
             .Build();
 
@@ -76,10 +78,11 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
         GC.SuppressFinalize(this);
     }
 
+    // Gets reused in test cases.
     public CasbinDbContext<int> CreateCasbinContext()
     {
         var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-            .UseNpgsql(_pgCasbin.GetConnectionString())
+            .UseNpgsql(_pgCasbin!.GetConnectionString())
             .Options;
 
         var casbinContext = new CasbinDbContext<int>(options);
