@@ -5,7 +5,7 @@ public class Database(DbContextOptions<Database> options) : DbContext(options)
     public DbSet<User> Users => Set<User>();
 }
 
-public class User
+public class User : IEntity
 {
     public int Id { get; set; }
     public required string Name { get; set; }
@@ -21,8 +21,14 @@ public class OrgRole
     public required string Name { get; set; }
 }
 
-public class Workspace
+public class Workspace : IEntity
 {
     public int Id { get; set; }
     public required string Name { get; set; }
+}
+
+public interface IEntity
+{
+    int Id { get; set; }
+    string Name { get; set; }
 }

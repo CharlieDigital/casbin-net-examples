@@ -1,4 +1,4 @@
-using Casbin.Persist.Adapter.EFCore;
+using DotNet.Testcontainers.Builders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Testcontainers.PostgreSql;
@@ -11,53 +11,77 @@ using TUnit.Core.Interfaces;
 public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
 {
     private PostgreSqlContainer _pg = null!;
+    private PostgreSqlContainer _pgCasbin = null!;
 
     public PooledDbContextFactory<Database> Factory { get; private set; } = null!;
+    public PooledDbContextFactory<CasbinDatabase> CasbinFactory
+    {
+        get;
+        private set;
+    } = null!;
 
     public async Task InitializeAsync()
     {
         // Set up the container with reuse
         _pg = new PostgreSqlBuilder()
-            .WithDatabase("casbin_test")
-            .WithPortBinding(54321)
-            .WithUsername("root")
-            .WithPassword("root")
+            .WithDatabase("domain")
             .WithReuse(true)
-            .WithName("test-casbin")
-            .WithLabel("reuse-id", "test-casbin")
+            .WithName("test-casbin-domain")
             .Build();
 
-        await _pg.StartAsync();
+        _pgCasbin = new PostgreSqlBuilder()
+            .WithDatabase("casbin")
+            .WithPortBinding(54321)
+            .WithReuse(true)
+            .WithName("test-casbin")
+            .Build();
 
-        // The base factory to create DbContext instances for our app.
-        Factory = new PooledDbContextFactory<Database>(
-            new DbContextOptionsBuilder<Database>()
-                .UseNpgsql(_pg.GetConnectionString())
-                .Options
-        );
+        await Task.WhenAll(_pg.StartAsync(), _pgCasbin.StartAsync());
 
-        // Delete the database and recreate it to make life easier.
-        using (var context = Factory.CreateDbContext())
+        var setupDomain = async Task () =>
         {
+            File.WriteAllText(
+                $"_setup-domain-start-{DateTime.UtcNow.Ticks}.txt",
+                DateTime.UtcNow.ToString("O")
+            );
+
+            // The base factory to create DbContext instances for our app.
+            Factory = new PooledDbContextFactory<Database>(
+                new DbContextOptionsBuilder<Database>()
+                    .UseNpgsql(_pg.GetConnectionString())
+                    .Options
+            );
+
+            // Delete the database and recreate it to make life easier.
+            using var context = Factory.CreateDbContext();
             await context.Database.EnsureDeletedAsync();
             await context.Database.EnsureCreatedAsync();
             // Don't need to apply these since it will get created automatically.
-        }
+        };
 
-        using (var context = CreateCasbinContext())
+        var setupCasbin = async Task () =>
         {
-            // This is coming from a different pre-built context so we need to
-            // apply it here
-            await context.Database.MigrateAsync();
-        }
+            // The base factory to create DbContext instances for our app.
+            CasbinFactory = new PooledDbContextFactory<CasbinDatabase>(
+                new DbContextOptionsBuilder<CasbinDatabase>()
+                    .UseNpgsql(_pgCasbin.GetConnectionString())
+                    .Options
+            );
+
+            // Delete the database and recreate it to make life easier.
+            using var context = CasbinFactory.CreateDbContext();
+            await context.Database.EnsureDeletedAsync();
+            await context.Database.EnsureCreatedAsync();
+            // Don't need to apply these since it will get created automatically.
+        };
+
+        await Task.WhenAll(setupDomain(), setupCasbin());
 
         Console.WriteLine("✅  Initialized PgDatabaseFixture");
     }
 
     public async ValueTask DisposeAsync()
     {
-        File.WriteAllText("TestOutput_Dispose.txt", "Starting DisposeAsync");
-
         Console.WriteLine("✅  Disposing PgDatabaseFixture");
 
         // Clean everything up at the end (does not delete the container so we can reuse it)
@@ -67,19 +91,12 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
             await _pg.DisposeAsync();
         }
 
+        if (_pgCasbin != null)
+        {
+            await _pgCasbin.StopAsync();
+            await _pgCasbin.DisposeAsync();
+        }
+
         GC.SuppressFinalize(this);
-    }
-
-    // Gets reused in test cases.
-    public CasbinDatabase CreateCasbinContext()
-    {
-        var options = new DbContextOptionsBuilder<CasbinDbContext<Guid>>()
-            .UseNpgsql(_pg!.GetConnectionString())
-            .Options;
-
-        // Same database, but different schema.
-        var casbinDb = new CasbinDatabase(options);
-
-        return casbinDb;
     }
 }

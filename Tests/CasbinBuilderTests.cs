@@ -3,19 +3,26 @@ using Casbin.Model;
 using Casbin.Persist.Adapter.EFCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
+public enum UserActions
+{
+    Read,
+    Write,
+    Delete
+}
+
 /// <summary>
 /// NOTE: TUnit creates class-per-test and this is NOT the same behavior as xUnit
 /// or NUnit.  So this approach of using local variables is specific to TUnit.
 /// </summary>
-// dotnet run --treenode-filter "/*/*/CasbinBasicTests/*"
-public class CasbinBasicTests
+// dotnet run --treenode-filter "/*/*/CasbinBuilderTests/*"
+public class CasbinBuilderTests
 {
     private Database _db = null!;
     private CasbinDbContext<Guid> _casbinDb = null!;
     private Enforcer _enforcer = null!;
     private IDbContextTransaction _transaction = null!;
     private IDbContextTransaction _casbinTransaction = null!;
-    private string _aliceId = string.Empty;
+    private User _alice = null!;
 
     [Before(Test)]
     public async Task SetupAsync()
@@ -41,21 +48,20 @@ public class CasbinBasicTests
         var aliceEntity = _db.Users.Add(alice);
         await _db.SaveChangesAsync();
 
-        _aliceId = aliceEntity.Entity.Id.ToString();
+        _alice = aliceEntity.Entity; // The entity has an ID.
 
         // Add a policy to the alice record
-        _enforcer.AddPolicy(_aliceId, _aliceId, "read", "Motion");
-
-        await _enforcer.SavePolicyAsync();
+        await _enforcer
+            .ForSubject(alice, "Motion")
+            .Grant(UserActions.Read, alice)
+            .SaveAsync();
     }
 
     [After(Test)]
     public async Task TeardownAsync()
     {
         // Clean everything up after each test.
-        await _transaction.RollbackAsync();
         await _transaction.DisposeAsync();
-        await _casbinTransaction.RollbackAsync();
         await _casbinTransaction.DisposeAsync();
         await _db.DisposeAsync();
         await _casbinDb.DisposeAsync();
@@ -67,74 +73,62 @@ public class CasbinBasicTests
 
     // Basic test to ensure the database is working correctly.
     [Test]
-    public async Task Alice_Can_Read_Herself()
+    public async Task Alice_Can_Read_Herself_With_Builder()
     {
         // Check if alice can read her own record
-        var canRead = await _enforcer.EnforceAsync(
-            _aliceId,
-            _aliceId,
-            "read",
-            "Motion"
-        );
+        var canRead = await _enforcer
+            .ForSubject(_alice, "Motion")
+            .VerifyAsync(UserActions.Read, _alice);
         await Assert.That(canRead).IsTrue();
     }
 
     [Test]
-    public async Task Alice_Cannot_Read_Herself_In_Different_Domain()
+    public async Task Alice_Cannot_Read_Herself_In_Different_Domain_With_Builder()
     {
         // Check if alice can read her own record if a different domain
-        var canReadDifferentDomain = await _enforcer.EnforceAsync(
-            _aliceId,
-            _aliceId,
-            "read",
-            "Other_Company"
-        );
+        var canReadDifferentDomain = await _enforcer
+            .ForSubject(_alice, "Other_Company")
+            .VerifyAsync(UserActions.Read, _alice);
         await Assert.That(canReadDifferentDomain).IsFalse();
     }
 
     [Test]
-    public async Task Alice_Cannot_Write_Herself()
+    public async Task Alice_Cannot_Write_Herself_With_Builder()
     {
         // Check if alice can write her own record (should be false)
-        var canWrite = await _enforcer.EnforceAsync(
-            _aliceId,
-            _aliceId,
-            "write",
-            "Motion"
-        );
+        var canWrite = await _enforcer
+            .ForSubject(_alice, "Motion")
+            .VerifyAsync(UserActions.Write, _alice);
         await Assert.That(canWrite).IsFalse();
     }
 
     [Test]
-    public async Task Alice_Cannot_Read_Other_Records()
+    public async Task Alice_Cannot_Read_Other_Records_With_Builder()
     {
         // Check if alice can read a different record (should be false)
-        var canReadOther = await _enforcer.EnforceAsync(
-            _aliceId,
-            Random.Shared.Next(10000, 999999).ToString(),
-            "read",
-            "Motion"
-        );
+        var canReadOther = await _enforcer
+            .ForSubject(_alice, "Motion")
+            .VerifyAsync(
+                UserActions.Read,
+                Random.Shared.Next(10000, 999999).ToString()
+            );
         await Assert.That(canReadOther).IsFalse();
     }
 
     [Test]
-    public async Task Bob_Cannot_Read_Alice_Record()
+    public async Task Bob_Cannot_Read_Alice_Record_With_Builder()
     {
         // Check if bob can read alice's record (should be false)
-        var canBobReadAlice = await _enforcer.EnforceAsync(
-            "bob_id",
-            _aliceId,
-            "read",
-            "Motion"
-        );
+        var canBobReadAlice = await _enforcer
+            .ForSubject("bob_user_id", "Motion")
+            .VerifyAsync(UserActions.Read, _alice);
         await Assert.That(canBobReadAlice).IsFalse();
     }
 
     [Test]
     public async Task Can_Read_Alice_Policies()
     {
-        var policies = _enforcer.GetFilteredPolicy(0, _aliceId);
+        var policies = _enforcer.GetFilteredPolicy(0, _alice.Id.ToString());
         await Assert.That(policies.Count).IsEqualTo(1);
 
         var (sub, obj, act, dom) = policies.First().ToArray() switch
@@ -146,9 +140,9 @@ public class CasbinBasicTests
                 )
         };
 
-        await Assert.That(sub).IsEqualTo(_aliceId);
-        await Assert.That(obj).IsEqualTo(_aliceId);
-        await Assert.That(act).IsEqualTo("read");
+        await Assert.That(sub).IsEqualTo(_alice.Id.ToString());
+        await Assert.That(obj).IsEqualTo(_alice.Id.ToString());
+        await Assert.That(act).IsEqualTo("Read");
         await Assert.That(dom).IsEqualTo("Motion");
     }
 

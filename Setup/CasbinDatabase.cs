@@ -4,7 +4,8 @@ using Microsoft.EntityFrameworkCore;
 /// <summary>
 /// Create this wrapper so we can create the migration
 /// </summary>
-public class CasbinDatabase : CasbinDbContext<Guid>
+public class CasbinDatabase(DbContextOptions options)
+    : CasbinDbContext<Guid>(options, "casbin")
 {
     public CasbinDatabase()
         : this(
@@ -14,7 +15,4 @@ public class CasbinDatabase : CasbinDbContext<Guid>
                 )
                 .Options
         ) { }
-
-    public CasbinDatabase(DbContextOptions<CasbinDbContext<Guid>> options)
-        : base(options, "casbin") { }
 }
