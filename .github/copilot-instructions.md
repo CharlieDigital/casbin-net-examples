@@ -1,7 +1,6 @@
 ---
-applyTo: "*.cs"
+applyTo: "**/*.cs"
 ---
-
 # General Instructions
 - This is a .NET project using C#.
 - We are using .NET 9.0
