@@ -11,7 +11,6 @@ using TUnit.Core.Interfaces;
 public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
 {
     private PostgreSqlContainer _pg = null!;
-    private PostgreSqlContainer _pgCasbin = null!;
 
     public PooledDbContextFactory<Database> Factory { get; private set; } = null!;
 
@@ -19,10 +18,13 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
     {
         // Set up the container with reuse
         _pg = new PostgreSqlBuilder()
-            .WithDatabase("domain")
+            .WithDatabase("casbin_test")
+            .WithPortBinding(54321)
+            .WithUsername("root")
+            .WithPassword("root")
             .WithReuse(true)
-            .WithName("test-casbin-domain")
-            .WithLabel("reuse-id", "test-casbin-domain")
+            .WithName("test-casbin")
+            .WithLabel("reuse-id", "test-casbin")
             .Build();
 
         await _pg.StartAsync();
@@ -35,25 +37,19 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
         );
 
         // Delete the database and recreate it to make life easier.
-        using var context = Factory.CreateDbContext();
-        await context.Database.EnsureDeletedAsync();
-        await context.Database.EnsureCreatedAsync();
-        await context.Database.MigrateAsync();
+        using (var context = Factory.CreateDbContext())
+        {
+            await context.Database.EnsureDeletedAsync();
+            await context.Database.EnsureCreatedAsync();
+            // Don't need to apply these since it will get created automatically.
+        }
 
-        // Now initialize the Casbin database.
-        _pgCasbin = new PostgreSqlBuilder()
-            .WithDatabase("casbin")
-            .WithReuse(true)
-            .WithName("test-casbin")
-            .WithLabel("reuse-id", "test-casbin")
-            .Build();
-
-        await _pgCasbin.StartAsync();
-
-        await using var casbinContext = CreateCasbinContext();
-        await casbinContext.Database.EnsureDeletedAsync();
-        await casbinContext.Database.EnsureCreatedAsync();
-        await casbinContext.Database.MigrateAsync();
+        using (var context = CreateCasbinContext())
+        {
+            // This is coming from a different pre-built context so we need to
+            // apply it here
+            await context.Database.MigrateAsync();
+        }
 
         Console.WriteLine("✅  Initialized PgDatabaseFixture");
     }
@@ -71,24 +67,19 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
             await _pg.DisposeAsync();
         }
 
-        if (_pgCasbin != null)
-        {
-            await _pgCasbin.StopAsync();
-            await _pgCasbin.DisposeAsync();
-        }
-
         GC.SuppressFinalize(this);
     }
 
     // Gets reused in test cases.
-    public CasbinDbContext<int> CreateCasbinContext()
+    public CasbinDatabase CreateCasbinContext()
     {
-        var options = new DbContextOptionsBuilder<CasbinDbContext<int>>()
-            .UseNpgsql(_pgCasbin!.GetConnectionString())
+        var options = new DbContextOptionsBuilder<CasbinDbContext<Guid>>()
+            .UseNpgsql(_pg!.GetConnectionString())
             .Options;
 
-        var casbinContext = new CasbinDbContext<int>(options);
+        // Same database, but different schema.
+        var casbinDb = new CasbinDatabase(options);
 
-        return casbinContext;
+        return casbinDb;
     }
 }

@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 public class CasbinBasicTests
 {
     private Database _db = null!;
-    private CasbinDbContext<int> _casbinDb = null!;
+    private CasbinDbContext<Guid> _casbinDb = null!;
     private Enforcer _enforcer = null!;
     private IDbContextTransaction _transaction = null!;
     private IDbContextTransaction _casbinTransaction = null!;
@@ -26,7 +26,7 @@ public class CasbinBasicTests
         _transaction = await _db.Database.BeginTransactionAsync();
         _casbinTransaction = await _casbinDb.Database.BeginTransactionAsync();
 
-        var adapter = new EFCoreAdapter<int>(_casbinDb);
+        var adapter = new EFCoreAdapter<Guid>(_casbinDb);
         _enforcer = new Enforcer(CreateModel(), adapter);
 
         // Set up the entity (not strictly necessary here; but we want this here
@@ -158,3 +158,5 @@ public class CasbinBasicTests
         );
     }
 }
+
+internal class DependencyInjectionClassConstructor { }
