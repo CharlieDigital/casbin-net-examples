@@ -60,6 +60,8 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        File.WriteAllText("TestOutput_Dispose.txt", "Starting DisposeAsync");
+
         Console.WriteLine("✅  Disposing PgDatabaseFixture");
 
         // Clean everything up at the end (does not delete the container so we can reuse it)

@@ -29,7 +29,8 @@ public class CasbinBasicTests
         var adapter = new EFCoreAdapter<int>(_casbinDb);
         _enforcer = new Enforcer(CreateModel(), adapter);
 
-        // Set up the entity
+        // Set up the entity (not strictly necessary here; but we want this here
+        // so we can test the bulk scenario in other cases)
         var alice = new User
         {
             Name = "Alice",
