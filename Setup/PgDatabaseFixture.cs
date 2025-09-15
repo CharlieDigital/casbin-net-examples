@@ -49,6 +49,11 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
             Factory = new PooledDbContextFactory<Database>(
                 new DbContextOptionsBuilder<Database>()
                     .UseNpgsql(_pg.GetConnectionString())
+                    .LogTo(
+                        Console.WriteLine,
+                        Microsoft.Extensions.Logging.LogLevel.Information
+                    )
+                    .EnableSensitiveDataLogging()
                     .Options
             );
 
@@ -65,6 +70,11 @@ public class PgDatabaseFixture : IAsyncInitializer, IAsyncDisposable
             CasbinFactory = new PooledDbContextFactory<CasbinDatabase>(
                 new DbContextOptionsBuilder<CasbinDatabase>()
                     .UseNpgsql(_pgCasbin.GetConnectionString())
+                    .LogTo(
+                        Console.WriteLine,
+                        Microsoft.Extensions.Logging.LogLevel.Information
+                    )
+                    .EnableSensitiveDataLogging()
                     .Options
             );
 
