@@ -1,5 +1,6 @@
 using Casbin;
 using Casbin.Model;
+using Casbin.Persist;
 using Casbin.Persist.Adapter.EFCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -26,8 +27,7 @@ public class CasbinBasicTests
         _transaction = await _db.Database.BeginTransactionAsync();
         _casbinTransaction = await _casbinDb.Database.BeginTransactionAsync();
 
-        var adapter = new EFCoreAdapter<Guid>(_casbinDb);
-        _enforcer = new Enforcer(CreateModel(), adapter);
+        _enforcer = CreateEnforcer("default");
 
         // Set up the entity (not strictly necessary here; but we want this here
         // so we can test the bulk scenario in other cases)
@@ -35,18 +35,31 @@ public class CasbinBasicTests
         {
             Name = "Alice",
             Email = "alice@example.com",
-            Company = "Motion"
+            Company = "Motion",
         };
 
         var aliceEntity = _db.Users.Add(alice);
+        Console.WriteLine("Adding Alice");
         await _db.SaveChangesAsync();
 
         _aliceId = aliceEntity.Entity.Id.ToString();
 
+        Console.WriteLine("Adding Policy");
         // Add a policy to the alice record
         _enforcer.AddPolicy(_aliceId, _aliceId, "read", "Motion");
 
         await _enforcer.SavePolicyAsync();
+        Console.WriteLine("Policy Saved");
+    }
+
+    private Enforcer CreateEnforcer(string name)
+    {
+        Console.WriteLine($"Creating Enforcer: {name}");
+        var adapter = new EFCoreAdapter<Guid>(_casbinDb);
+        var enforcer = new Enforcer(CreateModel(), adapter);
+        Console.WriteLine($"Created Enforce: {name}");
+
+        return enforcer;
     }
 
     [After(Test)]
@@ -65,10 +78,40 @@ public class CasbinBasicTests
     [ClassDataSource<PgDatabaseFixture>(Shared = SharedType.PerTestSession)]
     public required PgDatabaseFixture Pg { get; init; }
 
+    [Test]
+    public async Task Multiple_Enforcers()
+    {
+        var enforcer2 = CreateEnforcer("2");
+
+        Console.WriteLine("Adding write policy to 'default'");
+        _enforcer.AddPolicy(_aliceId, _aliceId, "write", "Motion");
+
+        Console.WriteLine("Enforce");
+        // Check if alice can read her own record
+        var canRead = await _enforcer.EnforceAsync(
+            _aliceId,
+            _aliceId,
+            "write",
+            "Motion"
+        );
+        await Assert.That(canRead).IsTrue();
+
+        var canRead2 = await enforcer2.EnforceAsync(
+            _aliceId,
+            _aliceId,
+            "write",
+            "Motion"
+        );
+        // This is actually false because the policy wasn't loaded into the 2nd enforcer.
+        // In order to propogate these policy changes, we need a Watcher.
+        await Assert.That(canRead2).IsFalse();
+    }
+
     // Basic test to ensure the database is working correctly.
     [Test]
     public async Task Alice_Can_Read_Herself()
     {
+        Console.WriteLine("Enforce");
         // Check if alice can read her own record
         var canRead = await _enforcer.EnforceAsync(
             _aliceId,
@@ -140,10 +183,9 @@ public class CasbinBasicTests
         var (sub, obj, act, dom) = policies.First().ToArray() switch
         {
             [var s, var o, var a, var d] => (s, o, a, d),
-            _
-                => throw new InvalidOperationException(
-                    "Policy does not have 4 elements"
-                )
+            _ => throw new InvalidOperationException(
+                "Policy does not have 4 elements"
+            ),
         };
 
         await Assert.That(sub).IsEqualTo(_aliceId);
