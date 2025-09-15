@@ -86,7 +86,7 @@ public class CasbinBasicTests
         Console.WriteLine("Adding write policy to 'default'");
         _enforcer.AddPolicy(_aliceId, _aliceId, "write", "Motion");
 
-        Console.WriteLine("Enforce");
+        Console.WriteLine("Enforce on default");
         // Check if alice can read her own record
         var canRead = await _enforcer.EnforceAsync(
             _aliceId,
@@ -96,6 +96,7 @@ public class CasbinBasicTests
         );
         await Assert.That(canRead).IsTrue();
 
+        Console.WriteLine("Enforce on 2");
         var canRead2 = await enforcer2.EnforceAsync(
             _aliceId,
             _aliceId,
